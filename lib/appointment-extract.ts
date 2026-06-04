@@ -13,6 +13,17 @@ function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
+const CAR_BRANDS =
+  /^(mazda|toyota|honda|ford|bmw|mercedes|audi|nissan|chevrolet|lexus|hyundai|kia|volkswagen|vw|subaru|jeep|dodge|ram|gmc|cadillac|porsche|tesla|lada|ваз|газ)$/i;
+
+function stripToken(token: string) {
+  return token.replace(/^[^A-Za-zА-Яа-яЁё0-9+]+|[^A-Za-zА-Яа-яЁё0-9_-]+$/g, "");
+}
+
+function isCarBrand(word: string) {
+  return CAR_BRANDS.test(word);
+}
+
 function detectService(text: string): string {
   const t = text.toLowerCase();
   if (/oil|масл|replace oil|change oil|замен/i.test(t)) return "Oil change";
@@ -58,24 +69,44 @@ function detectName(text: string, email?: string, phone?: string): string {
     return explicit.replace(/\s+(мой|my|номер|phone).*$/i, "").trim();
   }
 
-  for (const token of text.split(/\s+/).filter(Boolean)) {
-    if (token === email || token === phone) continue;
+  const commaParts = text.split(/[,;]+/).map((p) => p.trim()).filter(Boolean);
+  if (commaParts.length >= 2) {
+    const first = commaParts[0].replace(/[^A-Za-zА-Яа-яЁё\s'-]/g, "").trim();
+    const firstWord = first.split(/\s+/)[0] ?? "";
+    if (
+      firstWord.length >= 2 &&
+      /^[A-Za-zА-Яа-яЁё]{2,24}$/i.test(firstWord) &&
+      !isCarBrand(firstWord) &&
+      !detectService(first)
+    ) {
+      return capitalize(firstWord);
+    }
+  }
+
+  for (const raw of text.split(/\s+/).filter(Boolean)) {
+    const token = stripToken(raw);
+    if (!token || token === email || token === phone) continue;
     if (/@/.test(token) || /^\d+$/.test(token)) continue;
+    if (isCarBrand(token) || detectService(token)) continue;
     if (/^[A-Za-zА-Яа-яЁё]{2,24}$/i.test(token)) return capitalize(token);
   }
 
-  const parts = text.split(/[,;]+/).map((p) => p.trim());
-  for (const p of parts) {
+  for (const p of commaParts) {
     if (p === email || p === phone) continue;
-    if (/^[A-Za-zА-Яа-яЁё]{2,24}$/.test(p)) return capitalize(p);
-    if (/^[A-Za-zА-Яа-яЁё]{2,24}\s/.test(p) && !p.includes("@")) {
-      const first = p.split(/\s+/)[0];
-      if (first.length >= 2) return capitalize(first);
+    const clean = p.replace(/[^A-Za-zА-Яа-яЁё\s'-]/g, "").trim();
+    const first = clean.split(/\s+/)[0] ?? "";
+    if (
+      first.length >= 2 &&
+      /^[A-Za-zА-Яа-яЁё]{2,24}$/i.test(first) &&
+      !isCarBrand(first) &&
+      !p.includes("@")
+    ) {
+      return capitalize(first);
     }
   }
 
   const firstComma = text.match(/^([A-Za-zА-Яа-яЁё]{2,24})\s*,/);
-  if (firstComma) return capitalize(firstComma[1]);
+  if (firstComma && !isCarBrand(firstComma[1])) return capitalize(firstComma[1]);
 
   return "";
 }

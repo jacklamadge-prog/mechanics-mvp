@@ -162,7 +162,7 @@ export function appointmentEmailHtml(data: {
     : undefined;
 
   const rows: { label: string; value: string; link?: string }[] = [
-    { label: "Customer", value: data.name },
+      { label: "Name", value: data.name },
     { label: "Phone", value: data.phone, link: phoneHref },
     { label: "Vehicle", value: data.vehicle },
     { label: "Service", value: data.service },
@@ -191,7 +191,7 @@ export function appointmentEmailHtml(data: {
   const text = [
     "New appointment — Mike's Auto Repair",
     "",
-    `Customer: ${data.name}`,
+    `Name: ${data.name}`,
     `Phone: ${data.phone}`,
     ...(customerEmail ? [`Email: ${customerEmail}`] : []),
     `Vehicle: ${data.vehicle}`,
