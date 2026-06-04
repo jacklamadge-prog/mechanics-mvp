@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 
-const DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1";
-/** Fast default — change in .env.local; see README for speed tiers */
-const DEFAULT_MODEL = "nvidia/nemotron-mini-4b-instruct";
+/** Set NVIDIA_BASE_URL and NVIDIA_MODEL in .env.local / Netlify env */
+const DEFAULT_BASE_URL = "";
+const DEFAULT_MODEL = "";
 
 export function getNvidiaClient() {
   const apiKey = process.env.NVIDIA_API_KEY;

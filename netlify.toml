@@ -2,5 +2,9 @@
   command = "npm run build"
   publish = ".next"
 
+[build.environment]
+  # Next.js inlines server env at build time — not a leak
+  SECRETS_SCAN_OMIT_KEYS = "OWNER_EMAIL,FROM_EMAIL,NVIDIA_BASE_URL,NVIDIA_MODEL"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"

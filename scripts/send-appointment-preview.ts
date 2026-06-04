@@ -15,7 +15,7 @@ for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
 const data = {
   name: "Timur",
   phone: "79381450292",
-  email: "jacklamadge@gmail.com",
+  email: "customer@example.com",
   vehicle: "Mazda cx5",
   service: "Oil change",
 };

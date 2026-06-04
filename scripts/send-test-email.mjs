@@ -23,7 +23,7 @@ loadEnv();
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const to = process.env.OWNER_EMAIL;
-const from = process.env.FROM_EMAIL || "onboarding@resend.dev";
+const from = process.env.FROM_EMAIL || "hello@example.com";
 
 const { data, error } = await resend.emails.send({
   from: `Mike's Auto Repair <${from}>`,

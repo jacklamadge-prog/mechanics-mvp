@@ -7,9 +7,9 @@ export function getResend() {
 }
 
 export function getOwnerEmail() {
-  return process.env.OWNER_EMAIL ?? "jacklamadge@gmail.com";
+  return process.env.OWNER_EMAIL ?? "";
 }
 
 export function getFromEmail() {
-  return process.env.FROM_EMAIL ?? "onboarding@resend.dev";
+  return process.env.FROM_EMAIL ?? "";
 }
