@@ -134,8 +134,98 @@ export function extractAppointmentFromMessages(
   };
 }
 
+export type BookingField = "name" | "phone" | "email" | "vehicle" | "service";
+
+export function hasBookingIntent(text: string): boolean {
+  return (
+    /book|appointment|schedule|запис|приём|прием/i.test(text) ||
+    (/\b(need|want|надо|хочу)\b/i.test(text) && !!detectService(text)) ||
+    /\b(change oil|oil change)\b/i.test(text)
+  );
+}
+
+/** User is trying to book (not just asking price) */
+export function userWantsToBookNow(messages: Msg[]): boolean {
+  const users = messages.filter((m) => m.role === "user").map((m) => m.content);
+  const last = users[users.length - 1] ?? "";
+  const all = users.join("\n");
+
+  if (/book an appointment|schedule an appointment|make an appointment|записаться/i.test(last)) {
+    return true;
+  }
+
+  if (/how much|price|cost|\$|quote|стоим|цена/i.test(last) && !/book|schedule/i.test(last)) {
+    return false;
+  }
+
+  const serviceMentions = users.filter((c) => detectService(c)).length;
+  if (serviceMentions >= 2 && detectService(last) && /\b(need|want|надо|хочу)\b/i.test(last)) {
+    return true;
+  }
+
+  if (/\b(book|schedule)\b/i.test(last) && detectService(all)) return true;
+
+  return false;
+}
+
+export function getMissingBookingFields(messages: Msg[]): BookingField[] {
+  const userOnly = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join("\n");
+  const detail = bookingDetailText(messages) || userOnly;
+
+  const email = detail.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0];
+  const phone = detail.match(/\b\d{10,15}\b/)?.[0];
+  const service = detectService(detail) || detectService(userOnly);
+  const vehicle = detectVehicle(detail) || detectVehicle(userOnly);
+  const name = detectName(detail, email, phone) || detectName(userOnly, email, phone);
+
+  const missing: BookingField[] = [];
+  if (!name) missing.push("name");
+  if (!phone) missing.push("phone");
+  if (!email) missing.push("email");
+  if (!vehicle) missing.push("vehicle");
+  if (!service) missing.push("service");
+  return missing;
+}
+
+export function buildBookingAskMessage(
+  missing: BookingField[],
+  russian: boolean
+): string {
+  const en: Record<BookingField, string> = {
+    name: "your name",
+    phone: "phone number",
+    email: "email",
+    vehicle: "vehicle (make & model)",
+    service: "service needed",
+  };
+  const ru: Record<BookingField, string> = {
+    name: "имя",
+    phone: "телефон",
+    email: "email",
+    vehicle: "авто (марка и модель)",
+    service: "услуга",
+  };
+  const labels = russian ? ru : en;
+  const list = missing.map((f) => labels[f]).join(", ");
+
+  if (russian) {
+    return `Чтобы записать вас, пришлите: ${list}. Пример: Тимур, 79381450292, you@email.com, Mazda CX-5, замена масла`;
+  }
+  return `To book your appointment, please send: ${list}. Example: Timur, 5551234567, you@email.com, Mazda CX-5, oil change`;
+}
+
 export function looksLikeBookingConfirmation(text: string) {
   return /submitted|confirmed|successfully|заявк|запис|принят|свяжем|подтверж/i.test(
+    text
+  );
+}
+
+/** AI said "we have everything" without real data */
+export function looksLikePrematureBookingClose(text: string) {
+  return /collected all|have your information|will contact you soon|contact you soon|all the necessary|everything (we|i) need|shop will contact|собрал|свяжемся|вс[её] данн/i.test(
     text
   );
 }
