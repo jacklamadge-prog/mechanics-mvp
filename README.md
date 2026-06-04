@@ -6,7 +6,7 @@ Demo landing page with live AI chat for **Mike's Auto Repair**. Built to show sh
 
 - **Talk to the AI Receptionist** — support-style chat (NVIDIA Nemotron)
 - Answers services, pricing, hours, appointment booking
-- Collects appointment leads (name, phone, email, vehicle, service) → **Resend email**
+- Collects appointment leads (name, phone, vehicle, service; email optional) → **Resend email**
 - **Get Your Own AI Receptionist** contact form → demo requests via Resend
 
 ## Quick start

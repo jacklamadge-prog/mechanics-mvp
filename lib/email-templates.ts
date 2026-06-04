@@ -151,27 +151,40 @@ function siteCardEmail(options: {
 export function appointmentEmailHtml(data: {
   name: string;
   phone: string;
-  email: string;
+  email?: string;
   vehicle: string;
   service: string;
 }) {
   const phoneHref = `tel:${data.phone.replace(/[^\d+]/g, "")}`;
-  const mailHref = `mailto:${encodeURIComponent(data.email)}?subject=${encodeURIComponent("Mike's Auto Repair — appointment confirmation")}`;
+  const customerEmail = data.email?.trim() ?? "";
+  const mailHref = customerEmail
+    ? `mailto:${encodeURIComponent(customerEmail)}?subject=${encodeURIComponent("Mike's Auto Repair — appointment confirmation")}`
+    : undefined;
+
+  const rows: { label: string; value: string; link?: string }[] = [
+    { label: "Customer", value: data.name },
+    { label: "Phone", value: data.phone, link: phoneHref },
+    { label: "Vehicle", value: data.vehicle },
+    { label: "Service", value: data.service },
+  ];
+  if (customerEmail) {
+    rows.splice(2, 0, {
+      label: "Email",
+      value: customerEmail,
+      link: mailHref,
+    });
+  }
 
   const html = siteCardEmail({
     preheader: `${data.name} · ${data.service} · ${data.phone}`,
     badge: "NEW LEAD",
     headline: "New appointment",
     subline: "A customer booked through your AI receptionist. Contact them to confirm the visit.",
-    rows: [
-      { label: "Customer", value: data.name },
-      { label: "Phone", value: data.phone, link: phoneHref },
-      { label: "Email", value: data.email, link: mailHref },
-      { label: "Vehicle", value: data.vehicle },
-      { label: "Service", value: data.service },
-    ],
+    rows,
     primaryButton: { label: `Call ${data.name}`, href: phoneHref },
-    secondaryButton: { label: "Reply by email", href: mailHref },
+    secondaryButton: mailHref
+      ? { label: "Reply by email", href: mailHref }
+      : undefined,
     footer: "Tip: call within 15 minutes — customers book faster when you respond quickly.",
   });
 
@@ -180,7 +193,7 @@ export function appointmentEmailHtml(data: {
     "",
     `Customer: ${data.name}`,
     `Phone: ${data.phone}`,
-    `Email: ${data.email}`,
+    ...(customerEmail ? [`Email: ${customerEmail}`] : []),
     `Vehicle: ${data.vehicle}`,
     `Service: ${data.service}`,
     "",

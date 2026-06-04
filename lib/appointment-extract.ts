@@ -3,6 +3,7 @@ type Msg = { role: string; content: string };
 export type AppointmentData = {
   name: string;
   phone: string;
+  /** Optional — only if the customer volunteers it */
   email: string;
   vehicle: string;
   service: string;
@@ -114,7 +115,6 @@ export function extractAppointmentFromMessages(
 
   if (
     !service &&
-    email &&
     phone &&
     name &&
     vehicle &&
@@ -123,18 +123,18 @@ export function extractAppointmentFromMessages(
     service = "General appointment";
   }
 
-  if (!email || !phone || !name || !vehicle || !service) return null;
+  if (!phone || !name || !vehicle || !service) return null;
 
   return {
     name,
     phone,
-    email,
+    email: email ?? "",
     vehicle,
     service,
   };
 }
 
-export type BookingField = "name" | "phone" | "email" | "vehicle" | "service";
+export type BookingField = "name" | "phone" | "vehicle" | "service";
 
 export function hasBookingIntent(text: string): boolean {
   return (
@@ -184,7 +184,6 @@ export function getMissingBookingFields(messages: Msg[]): BookingField[] {
   const missing: BookingField[] = [];
   if (!name) missing.push("name");
   if (!phone) missing.push("phone");
-  if (!email) missing.push("email");
   if (!vehicle) missing.push("vehicle");
   if (!service) missing.push("service");
   return missing;
@@ -197,14 +196,12 @@ export function buildBookingAskMessage(
   const en: Record<BookingField, string> = {
     name: "your name",
     phone: "phone number",
-    email: "email",
     vehicle: "vehicle (make & model)",
     service: "service needed",
   };
   const ru: Record<BookingField, string> = {
     name: "имя",
     phone: "телефон",
-    email: "email",
     vehicle: "авто (марка и модель)",
     service: "услуга",
   };
@@ -212,9 +209,9 @@ export function buildBookingAskMessage(
   const list = missing.map((f) => labels[f]).join(", ");
 
   if (russian) {
-    return `Чтобы записать вас, пришлите: ${list}. Пример: Тимур, 79381450292, you@email.com, Mazda CX-5, замена масла`;
+    return `Чтобы записать вас, пришлите: ${list}. Пример: Тимур, 79381450292, Mazda CX-5, замена масла`;
   }
-  return `To book your appointment, please send: ${list}. Example: Timur, 5551234567, you@email.com, Mazda CX-5, oil change`;
+  return `To book your appointment, please send: ${list}. Example: Timur, 5551234567, Mazda CX-5, oil change`;
 }
 
 export function looksLikeBookingConfirmation(text: string) {
