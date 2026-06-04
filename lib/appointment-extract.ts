@@ -26,7 +26,14 @@ function detectVehicle(text: string): string {
   const m = text.match(
     /\b(mazda|toyota|honda|ford|bmw|mercedes|audi|nissan|chevrolet|lexus|hyundai|kia|volkswagen|vw|subaru|jeep|dodge|ram|gmc|cadillac|porsche|tesla|lada|ваз|газ)\s*([a-z0-9\s-]{0,15})/i
   );
-  if (m) return `${capitalize(m[1])} ${m[2]?.trim() || ""}`.trim();
+  if (m) {
+    let rest = (m[2] ?? "").trim();
+    for (const word of ["oil", "brake", "tire", "battery", "diagnostic"]) {
+      const idx = rest.toLowerCase().indexOf(word);
+      if (idx > 0) rest = rest.slice(0, idx).trim();
+    }
+    return `${capitalize(m[1])} ${rest}`.trim();
+  }
 
   const parts = text.split(/[,;]+/).map((p) => p.trim());
   for (const p of parts) {
@@ -50,6 +57,12 @@ function detectName(text: string, email?: string, phone?: string): string {
     return explicit.replace(/\s+(мой|my|номер|phone).*$/i, "").trim();
   }
 
+  for (const token of text.split(/\s+/).filter(Boolean)) {
+    if (token === email || token === phone) continue;
+    if (/@/.test(token) || /^\d+$/.test(token)) continue;
+    if (/^[A-Za-zА-Яа-яЁё]{2,24}$/i.test(token)) return capitalize(token);
+  }
+
   const parts = text.split(/[,;]+/).map((p) => p.trim());
   for (const p of parts) {
     if (p === email || p === phone) continue;
@@ -66,6 +79,20 @@ function detectName(text: string, email?: string, phone?: string): string {
   return "";
 }
 
+/** Prefer the user message that actually contains contact details */
+function bookingDetailText(messages: Msg[]): string {
+  const users = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content.trim())
+    .filter(Boolean);
+
+  const rich = [...users]
+    .reverse()
+    .find((c) => /@/.test(c) || /\b\d{10,15}\b/.test(c));
+
+  return rich ?? users[users.length - 1] ?? users.join("\n");
+}
+
 export function extractAppointmentFromMessages(
   messages: Msg[]
 ): AppointmentData | null {
@@ -74,12 +101,27 @@ export function extractAppointmentFromMessages(
     .map((m) => m.content)
     .join("\n");
   const full = userOnly || messages.map((m) => m.content).join("\n");
+  const detail = bookingDetailText(messages) || full;
 
-  const email = full.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0];
-  const phone = full.match(/\b\d{10,15}\b/)?.[0];
-  const service = detectService(full);
-  const vehicle = detectVehicle(full);
-  const name = detectName(full, email, phone);
+  const email =
+    detail.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] ??
+    full.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0];
+  const phone =
+    detail.match(/\b\d{10,15}\b/)?.[0] ?? full.match(/\b\d{10,15}\b/)?.[0];
+  let service = detectService(detail) || detectService(full);
+  const vehicle = detectVehicle(detail) || detectVehicle(full);
+  const name = detectName(detail, email, phone) || detectName(full, email, phone);
+
+  if (
+    !service &&
+    email &&
+    phone &&
+    name &&
+    vehicle &&
+    /book|appointment|запис|приём/i.test(full)
+  ) {
+    service = "General appointment";
+  }
 
   if (!email || !phone || !name || !vehicle || !service) return null;
 
