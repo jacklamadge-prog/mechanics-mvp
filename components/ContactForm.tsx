@@ -31,6 +31,13 @@ export default function ContactForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Submission failed");
 
+      if (data.emailed === false) {
+        throw new Error(
+          data.emailError ??
+            "Form saved but email failed. Check Netlify env vars (RESEND_API_KEY, OWNER_EMAIL, FROM_EMAIL)."
+        );
+      }
+
       setSuccess(true);
       setBusinessName("");
       setOwnerName("");
