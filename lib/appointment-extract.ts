@@ -73,10 +73,19 @@ function detectVehicle(text: string): string {
   return "";
 }
 
+function isBookingPhraseOnly(text: string): boolean {
+  const t = text.trim();
+  if (/[\n,;]/.test(t)) return false;
+  if (/^(book|schedule|make)\s+(an?\s+)?appoint/i.test(t)) {
+    return t.split(/\s+/).filter(Boolean).length <= 4;
+  }
+  if (/^(записаться|запись|хочу записаться)$/i.test(t)) return true;
+  return false;
+}
+
 function detectName(text: string, email?: string, phone?: string): string {
   const trimmed = text.trim();
-  if (/^(book|schedule|make)\s+(an?\s+)?appoint/i.test(trimmed)) return "";
-  if (/^(записаться|запись|хочу записаться)/i.test(trimmed)) return "";
+  if (isBookingPhraseOnly(trimmed)) return "";
 
   const explicit = text.match(
     /(?:меня зовут|зовут|my name is|i'?m|name is|i am)\s+([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\s'-]{1,28})/i
@@ -135,31 +144,60 @@ function bookingDetailText(messages: Msg[]): string {
   return rich ?? users[users.length - 1] ?? users.join("\n");
 }
 
+function userMessageTexts(messages: Msg[]): string[] {
+  return messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content.trim())
+    .filter(Boolean);
+}
+
+/** Scan each user turn — fields spread across messages are merged */
+function collectBookingFields(messages: Msg[]) {
+  const users = userMessageTexts(messages);
+  const userOnly = users.join("\n");
+
+  let phone = "";
+  let email = "";
+  for (const c of [...users].reverse()) {
+    if (!phone) phone = c.match(/\b\d{10,15}\b/)?.[0] ?? "";
+    if (!email) {
+      email =
+        c.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] ?? "";
+    }
+  }
+  phone = phone || userOnly.match(/\b\d{10,15}\b/)?.[0] ?? "";
+  email =
+    email ||
+    userOnly.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] ||
+    "";
+
+  let name = "";
+  let vehicle = "";
+  let service = "";
+  for (const c of users) {
+    if (!name) name = detectName(c, email, phone);
+    if (!vehicle) vehicle = detectVehicle(c);
+    if (!service) service = detectService(c);
+  }
+  vehicle = vehicle || detectVehicle(userOnly);
+  service = service || detectService(userOnly);
+
+  return { name, phone, email, vehicle, service, userOnly };
+}
+
 export function extractAppointmentFromMessages(
   messages: Msg[]
 ): AppointmentData | null {
-  const userOnly = messages
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .join("\n");
-  const full = userOnly || messages.map((m) => m.content).join("\n");
-  const detail = bookingDetailText(messages) || full;
-
-  const email =
-    detail.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] ??
-    full.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0];
-  const phone =
-    detail.match(/\b\d{10,15}\b/)?.[0] ?? full.match(/\b\d{10,15}\b/)?.[0];
-  let service = detectService(detail) || detectService(full);
-  const vehicle = detectVehicle(detail) || detectVehicle(full);
-  const name = detectName(detail, email, phone) || detectName(full, email, phone);
+  const { name, phone, email, vehicle, service: detectedService, userOnly } =
+    collectBookingFields(messages);
+  let service = detectedService;
 
   if (
     !service &&
     phone &&
     name &&
     vehicle &&
-    /book|appointment|запис|приём/i.test(full)
+    /book|appointment|запис|приём/i.test(userOnly)
   ) {
     service = "General appointment";
   }
@@ -207,7 +245,7 @@ export function userAffirmedBooking(messages: Msg[]): boolean {
 export function assistantAskedForBookingDetails(messages: Msg[]): boolean {
   const lastAssistant =
     [...messages].reverse().find((m) => m.role === "assistant")?.content ?? "";
-  return /name.*phone|phone.*vehicle|book your appointment|provide me with|please send|пришлите|имя.*телефон|could you please provide|to book your appointment/i.test(
+  return /name.*phone|phone.*vehicle|book your appointment|provide me with|please send|still need|got it|пришлите|имя.*телефон|could you please provide|to book your appointment/i.test(
     lastAssistant
   );
 }
@@ -264,17 +302,7 @@ export function isInBookingFlow(messages: Msg[]): boolean {
 }
 
 export function getMissingBookingFields(messages: Msg[]): BookingField[] {
-  const userOnly = messages
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .join("\n");
-  const detail = bookingDetailText(messages) || userOnly;
-
-  const email = detail.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0];
-  const phone = detail.match(/\b\d{10,15}\b/)?.[0];
-  const service = detectService(detail) || detectService(userOnly);
-  const vehicle = detectVehicle(detail) || detectVehicle(userOnly);
-  const name = detectName(detail, email, phone) || detectName(userOnly, email, phone);
+  const { name, phone, vehicle, service } = collectBookingFields(messages);
 
   const missing: BookingField[] = [];
   if (!name) missing.push("name");
@@ -306,15 +334,7 @@ export function buildBookingAskMessage(
 
   let name = "";
   if (messages) {
-    const detail = bookingDetailText(messages);
-    const userOnly = messages
-      .filter((m) => m.role === "user")
-      .map((m) => m.content)
-      .join("\n");
-    const email = detail.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0];
-    const phone = detail.match(/\b\d{10,15}\b/)?.[0];
-    name =
-      detectName(detail, email, phone) || detectName(userOnly, email, phone);
+    name = collectBookingFields(messages).name;
   }
 
   if (name && !missing.includes("name")) {
