@@ -176,7 +176,7 @@ function collectBookingFields(messages: Msg[]) {
   let name = "";
   let vehicle = "";
   let service = "";
-  for (const c of users) {
+  for (const c of [...users].reverse()) {
     if (!name) name = detectName(c, email, phone);
     if (!vehicle) vehicle = detectVehicle(c);
     if (!service) service = detectService(c);
@@ -314,6 +314,12 @@ export function getMissingBookingFields(messages: Msg[]): BookingField[] {
   return missing;
 }
 
+function isGreeting(text: string): boolean {
+  return /^(hi|hello|hey|howdy|yo|sup|привет|здравствуйте|добрый день|good (morning|afternoon|evening))$/i.test(
+    text.trim()
+  );
+}
+
 export function buildBookingAskMessage(
   missing: BookingField[],
   russian: boolean,
@@ -334,6 +340,8 @@ export function buildBookingAskMessage(
   const labels = russian ? ru : en;
   const list = missing.map((f) => labels[f]).join(", ");
 
+  const lastUser = messages ? (userMessageTexts(messages).at(-1) ?? "") : "";
+  const userTurns = messages ? userMessageTexts(messages).length : 0;
   let name = "";
   if (messages) {
     name = collectBookingFields(messages).name;
@@ -341,9 +349,23 @@ export function buildBookingAskMessage(
 
   if (name && !missing.includes("name")) {
     if (russian) {
-      return `${name}, принято. Ещё нужно: ${list}. Пример: 79381450292, Mazda CX-5`;
+      return `${name}, принято. Ещё нужно: ${list}. Пример: 79381450292, Mazda CX-5, замена масла`;
     }
-    return `${name}, got it. Still need: ${list}. Example: 5551234567, Mazda CX-5`;
+    return `${name}, got it. Still need: ${list}. Example: 5551234567, Mazda CX-5, oil change`;
+  }
+
+  if (isGreeting(lastUser)) {
+    if (russian) {
+      return `Привет! Для записи ещё нужно: ${list}. Можно одним сообщением — например: Тимур, 79381450292, Mazda CX-5, замена масла`;
+    }
+    return `Hi! To finish booking, I still need: ${list}. One message is fine — e.g. Timur, 5551234567, Mazda CX-5, oil change`;
+  }
+
+  if (userTurns > 1) {
+    if (russian) {
+      return `Ещё нужно: ${list}. Пример: Тимур, 79381450292, Mazda CX-5, замена масла`;
+    }
+    return `Still need: ${list}. Example: Timur, 5551234567, Mazda CX-5, oil change`;
   }
 
   if (russian) {
