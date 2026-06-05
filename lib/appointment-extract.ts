@@ -176,10 +176,38 @@ export function hasBookingIntent(text: string): boolean {
 }
 
 /** User is trying to book (not just asking price) */
+export function userAffirmedBooking(messages: Msg[]): boolean {
+  const reversed = [...messages].reverse();
+  for (let i = 0; i < reversed.length; i++) {
+    if (reversed[i].role !== "user") continue;
+    const text = reversed[i].content.trim();
+    if (!/^(yes|yeah|yep|sure|ok|okay|please|da|да|давай|конечно)$/i.test(text)) {
+      break;
+    }
+    const prevAssistant =
+      reversed.slice(i + 1).find((m) => m.role === "assistant")?.content ?? "";
+    if (/book|appointment|schedule|запис|would you like/i.test(prevAssistant)) {
+      return true;
+    }
+    break;
+  }
+  return false;
+}
+
+export function assistantAskedForBookingDetails(messages: Msg[]): boolean {
+  const lastAssistant =
+    [...messages].reverse().find((m) => m.role === "assistant")?.content ?? "";
+  return /name.*phone|phone.*vehicle|book your appointment|provide me with|please send|пришлите|имя.*телефон|could you please provide|to book your appointment/i.test(
+    lastAssistant
+  );
+}
+
 export function userWantsToBookNow(messages: Msg[]): boolean {
   const users = messages.filter((m) => m.role === "user").map((m) => m.content);
   const last = users[users.length - 1] ?? "";
   const all = users.join("\n");
+
+  if (userAffirmedBooking(messages)) return true;
 
   if (/book an appointment|schedule an appointment|make an appointment|записаться/i.test(last)) {
     return true;
@@ -195,6 +223,32 @@ export function userWantsToBookNow(messages: Msg[]): boolean {
   }
 
   if (/\b(book|schedule)\b/i.test(last) && detectService(all)) return true;
+
+  return false;
+}
+
+/** Collecting booking fields — skip AI confirm until name, phone, vehicle, service are present */
+export function isInBookingFlow(messages: Msg[]): boolean {
+  if (userWantsToBookNow(messages)) return true;
+  if (assistantAskedForBookingDetails(messages)) return true;
+
+  const missing = getMissingBookingFields(messages);
+  if (missing.length > 0 && missing.length < 4) {
+    const userText = messages
+      .filter((m) => m.role === "user")
+      .map((m) => m.content)
+      .join("\n");
+    if (
+      userAffirmedBooking(messages) ||
+      assistantAskedForBookingDetails(messages) ||
+      hasBookingIntent(userText) ||
+      messages.some(
+        (m) => m.role === "assistant" && /book|appointment|запис/i.test(m.content)
+      )
+    ) {
+      return true;
+    }
+  }
 
   return false;
 }
@@ -222,7 +276,8 @@ export function getMissingBookingFields(messages: Msg[]): BookingField[] {
 
 export function buildBookingAskMessage(
   missing: BookingField[],
-  russian: boolean
+  russian: boolean,
+  messages?: Msg[]
 ): string {
   const en: Record<BookingField, string> = {
     name: "your name",
@@ -239,6 +294,26 @@ export function buildBookingAskMessage(
   const labels = russian ? ru : en;
   const list = missing.map((f) => labels[f]).join(", ");
 
+  let name = "";
+  if (messages) {
+    const detail = bookingDetailText(messages);
+    const userOnly = messages
+      .filter((m) => m.role === "user")
+      .map((m) => m.content)
+      .join("\n");
+    const email = detail.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0];
+    const phone = detail.match(/\b\d{10,15}\b/)?.[0];
+    name =
+      detectName(detail, email, phone) || detectName(userOnly, email, phone);
+  }
+
+  if (name && !missing.includes("name")) {
+    if (russian) {
+      return `${name}, принято. Ещё нужно: ${list}. Пример: 79381450292, Mazda CX-5`;
+    }
+    return `${name}, got it. Still need: ${list}. Example: 5551234567, Mazda CX-5`;
+  }
+
   if (russian) {
     return `Чтобы записать вас, пришлите: ${list}. Пример: Тимур, 79381450292, Mazda CX-5, замена масла`;
   }
@@ -253,8 +328,13 @@ export function looksLikeBookingConfirmation(text: string) {
 
 /** AI said "we have everything" without real data */
 export function looksLikePrematureBookingClose(text: string) {
-  return /collected all|have your information|will contact you soon|contact you soon|all the necessary|everything (we|i) need|shop will contact|собрал|свяжемся|вс[её] данн/i.test(
-    text
+  return (
+    /collected all|have your information|will contact you soon|contact you soon|all the necessary|everything (we|i) need|shop will contact|собрал|свяжемся|вс[её] данн/i.test(
+      text
+    ) ||
+    /booking is confirmed|appointment is confirmed|your booking is confirmed|booking'?s confirmed|we'll contact you|we will contact you/i.test(
+      text
+    )
   );
 }
 

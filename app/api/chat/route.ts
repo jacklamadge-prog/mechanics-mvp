@@ -9,9 +9,9 @@ import {
   buildBookingAskMessage,
   extractAppointmentFromMessages,
   getMissingBookingFields,
+  isInBookingFlow,
   looksLikePrematureBookingClose,
   userPrefersRussian,
-  userWantsToBookNow,
 } from "@/lib/appointment-extract";
 import { trimChatHistory } from "@/lib/chat-helpers";
 import {
@@ -134,15 +134,12 @@ export async function POST(request: NextRequest) {
       return finalizeAppointment(complete, russian);
     }
 
-    const bookingNow = userWantsToBookNow(history);
-    if (bookingNow) {
-      const missing = getMissingBookingFields(history);
-      if (missing.length > 0) {
-        return NextResponse.json({
-          message: buildBookingAskMessage(missing, russian),
-          appointmentSubmitted: false,
-        });
-      }
+    const missing = getMissingBookingFields(history);
+    if (isInBookingFlow(history) && missing.length > 0) {
+      return NextResponse.json({
+        message: buildBookingAskMessage(missing, russian, history),
+        appointmentSubmitted: false,
+      });
     }
 
     const opts = getNvidiaChatOptions();
@@ -184,9 +181,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (looksLikePrematureBookingClose(reply)) {
-      const missing = getMissingBookingFields(history);
-      if (missing.length > 0) {
-        reply = buildBookingAskMessage(missing, russian);
+      const stillMissing = getMissingBookingFields(history);
+      if (stillMissing.length > 0) {
+        reply = buildBookingAskMessage(stillMissing, russian, history);
       }
     }
 
