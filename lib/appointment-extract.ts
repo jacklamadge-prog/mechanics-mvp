@@ -26,7 +26,7 @@ function isCarBrand(word: string) {
 
 /** Words that look like names but aren't (booking phrases, filler, etc.) */
 const NOT_A_NAME =
-  /^(book|schedule|appointment|appointments|yes|yeah|yep|sure|ok|okay|please|need|want|hello|hi|hey|thanks|thank|help|quote|price|hours|open|closed|when|what|how|can|could|would|the|and|for|with|my|me|you|an|make|get|da|да|нет|no|запис|прием|приём|хочу|надо|нужно|сколько|когда|масло|oil|brake|tire|change|service|repair|shop|auto|car)$/i;
+  /^(book|schedule|appointment|appointments|yes|yeah|yep|sure|ok|okay|please|need|want|hello|hi|hey|thanks|thank|help|quote|price|hours|open|closed|when|what|how|much|can|could|would|the|and|for|with|my|me|you|an|make|get|da|да|нет|no|запис|прием|приём|хочу|надо|нужно|сколько|когда|масло|oil|brake|tire|change|service|repair|shop|auto|car)$/i;
 
 function isLikelyPersonName(word: string): boolean {
   if (!/^[A-Za-zА-Яа-яЁё]{2,24}$/i.test(word)) return false;
@@ -44,6 +44,26 @@ function detectService(text: string): string {
   if (/tire|шин|колес/i.test(t)) return "Tire service";
   if (/battery|аккумулятор/i.test(t)) return "Battery replacement";
   return "";
+}
+
+function detectPhone(text: string): string {
+  const match = text.match(
+    /(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}/
+  );
+
+  if (!match) return "";
+
+  const normalized = match[0].replace(/[^\d]/g, "");
+
+  if (
+    normalized === "0000000000" ||
+    normalized === "1111111111" ||
+    normalized === "1234567890"
+  ) {
+    return "";
+  }
+
+  return normalized;
 }
 
 function detectVehicle(text: string): string {
@@ -141,7 +161,7 @@ function bookingDetailText(messages: Msg[]): string {
 
   const rich = [...users]
     .reverse()
-    .find((c) => /@/.test(c) || /\b\d{10,15}\b/.test(c));
+    .find((c) => /@/.test(c) || !!detectPhone(c));
 
   return rich ?? users[users.length - 1] ?? users.join("\n");
 }
@@ -161,13 +181,13 @@ function collectBookingFields(messages: Msg[]) {
   let phone = "";
   let email = "";
   for (const c of [...users].reverse()) {
-    if (!phone) phone = c.match(/\b\d{10,15}\b/)?.[0] ?? "";
+    if (!phone) phone = detectPhone(c);
     if (!email) {
       email =
         c.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] ?? "";
     }
   }
-  phone = phone || (userOnly.match(/\b\d{10,15}\b/)?.[0] ?? "");
+  phone = phone || detectPhone(userOnly);
   email =
     email ||
     userOnly.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] ||
@@ -218,11 +238,15 @@ export function extractAppointmentFromMessages(
 export type BookingField = "name" | "phone" | "vehicle" | "service";
 
 export function hasBookingIntent(text: string): boolean {
-  return (
-    /book|appointment|schedule|запис|приём|прием/i.test(text) ||
-    (/\b(need|want|надо|хочу)\b/i.test(text) && !!detectService(text)) ||
-    /\b(change oil|oil change)\b/i.test(text)
-  );
+  if (/book|appointment|schedule|запис|приём|прием/i.test(text)) return true;
+  if (
+    /\b(change oil|oil change)\b/i.test(text) &&
+    /\b(book|schedule|need|want|надо|хочу)\b/i.test(text)
+  ) {
+    return true;
+  }
+  if (/\b(need|want|надо|хочу)\b/i.test(text) && !!detectService(text)) return true;
+  return false;
 }
 
 /** User is trying to book (not just asking price) */
@@ -351,14 +375,14 @@ export function buildBookingAskMessage(
     if (russian) {
       return `${name}, принято. Ещё нужно: ${list}. Пример: 79381450292, Mazda CX-5, замена масла`;
     }
-    return `${name}, got it. Still need: ${list}. Example: 5551234567, Mazda CX-5, oil change`;
+    return `${name}, got it. Still need: ${list}. Example: (555) 123-4567, Mazda CX-5, oil change`;
   }
 
   if (isGreeting(lastUser)) {
     if (russian) {
       return `Привет! Для записи ещё нужно: ${list}. Можно одним сообщением — например: Тимур, 79381450292, Mazda CX-5, замена масла`;
     }
-    return `Hi! To finish booking, I still need: ${list}. One message is fine — e.g. Timur, 5551234567, Mazda CX-5, oil change`;
+    return `Hi! To finish booking, I still need: ${list}. One message is fine — e.g. Timur, (555) 123-4567, Mazda CX-5, oil change`;
   }
 
   if (userTurns > 1) {
@@ -371,7 +395,7 @@ export function buildBookingAskMessage(
   if (russian) {
     return `Чтобы записать вас, пришлите: ${list}. Пример: Тимур, 79381450292, Mazda CX-5, замена масла`;
   }
-  return `To book your appointment, please send: ${list}. Example: Timur, 5551234567, Mazda CX-5, oil change`;
+  return `To book your appointment, please send: ${list}. Example: Timur, (555) 123-4567, Mazda CX-5, oil change`;
 }
 
 export function looksLikeBookingConfirmation(text: string) {
