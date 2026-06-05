@@ -36,6 +36,25 @@ function isLikelyPersonName(word: string): boolean {
   return true;
 }
 
+function looksLikePersonNameLine(text: string): boolean {
+  const t = text.trim();
+  if (!t || detectPhone(t) || /@/.test(t)) return false;
+  if (isBookingPhraseOnly(t) || detectService(t)) return false;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 4) return false;
+  if (words.some((w) => /^\d/.test(stripToken(w)))) return false;
+  return words.every((w) => isLikelyPersonName(stripToken(w)));
+}
+
+function formatPersonName(text: string): string {
+  return text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => capitalize(stripToken(w)))
+    .join(" ");
+}
+
 function detectService(text: string): string {
   const t = text.toLowerCase();
   if (/oil|масл|replace oil|change oil|замен/i.test(t)) return "Oil change";
@@ -67,7 +86,10 @@ function detectPhone(text: string): string {
 }
 
 function detectVehicle(text: string): string {
-  const m = text.match(
+  const trimmed = text.trim();
+  if (looksLikePersonNameLine(trimmed)) return "";
+
+  const m = trimmed.match(
     /\b(mazda|toyota|honda|ford|bmw|mercedes|audi|nissan|chevrolet|lexus|hyundai|kia|volkswagen|vw|subaru|jeep|dodge|ram|gmc|cadillac|porsche|tesla|lada|ваз|газ)\s*([a-z0-9\s-]{0,15})/i
   );
   if (m) {
@@ -108,6 +130,7 @@ function isBookingPhraseOnly(text: string): boolean {
 function detectName(text: string, email?: string, phone?: string): string {
   const trimmed = text.trim();
   if (isBookingPhraseOnly(trimmed)) return "";
+  if (looksLikePersonNameLine(trimmed)) return formatPersonName(trimmed);
 
   const explicit = text.match(
     /(?:меня зовут|зовут|my name is|i'?m|name is|i am)\s+([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\s'-]{1,28})/i
@@ -201,7 +224,6 @@ function collectBookingFields(messages: Msg[]) {
     if (!vehicle) vehicle = detectVehicle(c);
     if (!service) service = detectService(c);
   }
-  vehicle = vehicle || detectVehicle(userOnly);
   service = service || detectService(userOnly);
 
   return { name, phone, email, vehicle, service, userOnly };
