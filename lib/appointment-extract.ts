@@ -24,6 +24,18 @@ function isCarBrand(word: string) {
   return CAR_BRANDS.test(word);
 }
 
+/** Words that look like names but aren't (booking phrases, filler, etc.) */
+const NOT_A_NAME =
+  /^(book|schedule|appointment|appointments|yes|yeah|yep|sure|ok|okay|please|need|want|hello|hi|hey|thanks|thank|help|quote|price|hours|open|closed|when|what|how|can|could|would|the|and|for|with|my|me|you|an|make|get|da|да|нет|no|запис|прием|приём|хочу|надо|нужно|сколько|когда|масло|oil|brake|tire|change|service|repair|shop|auto|car)$/i;
+
+function isLikelyPersonName(word: string): boolean {
+  if (!/^[A-Za-zА-Яа-яЁё]{2,24}$/i.test(word)) return false;
+  if (isCarBrand(word)) return false;
+  if (detectService(word)) return false;
+  if (NOT_A_NAME.test(word)) return false;
+  return true;
+}
+
 function detectService(text: string): string {
   const t = text.toLowerCase();
   if (/oil|масл|replace oil|change oil|замен/i.test(t)) return "Oil change";
@@ -62,23 +74,25 @@ function detectVehicle(text: string): string {
 }
 
 function detectName(text: string, email?: string, phone?: string): string {
+  const trimmed = text.trim();
+  if (/^(book|schedule|make)\s+(an?\s+)?appoint/i.test(trimmed)) return "";
+  if (/^(записаться|запись|хочу записаться)/i.test(trimmed)) return "";
+
   const explicit = text.match(
     /(?:меня зовут|зовут|my name is|i'?m|name is|i am)\s+([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\s'-]{1,28})/i
   )?.[1];
   if (explicit) {
-    return explicit.replace(/\s+(мой|my|номер|phone).*$/i, "").trim();
+    const first = explicit.trim().split(/\s+/)[0] ?? "";
+    if (isLikelyPersonName(first)) {
+      return explicit.replace(/\s+(мой|my|номер|phone).*$/i, "").trim();
+    }
   }
 
   const commaParts = text.split(/[,;]+/).map((p) => p.trim()).filter(Boolean);
   if (commaParts.length >= 2) {
     const first = commaParts[0].replace(/[^A-Za-zА-Яа-яЁё\s'-]/g, "").trim();
     const firstWord = first.split(/\s+/)[0] ?? "";
-    if (
-      firstWord.length >= 2 &&
-      /^[A-Za-zА-Яа-яЁё]{2,24}$/i.test(firstWord) &&
-      !isCarBrand(firstWord) &&
-      !detectService(first)
-    ) {
+    if (isLikelyPersonName(firstWord) && !detectService(first)) {
       return capitalize(firstWord);
     }
   }
@@ -87,26 +101,22 @@ function detectName(text: string, email?: string, phone?: string): string {
     const token = stripToken(raw);
     if (!token || token === email || token === phone) continue;
     if (/@/.test(token) || /^\d+$/.test(token)) continue;
-    if (isCarBrand(token) || detectService(token)) continue;
-    if (/^[A-Za-zА-Яа-яЁё]{2,24}$/i.test(token)) return capitalize(token);
+    if (isLikelyPersonName(token)) return capitalize(token);
   }
 
   for (const p of commaParts) {
     if (p === email || p === phone) continue;
     const clean = p.replace(/[^A-Za-zА-Яа-яЁё\s'-]/g, "").trim();
     const first = clean.split(/\s+/)[0] ?? "";
-    if (
-      first.length >= 2 &&
-      /^[A-Za-zА-Яа-яЁё]{2,24}$/i.test(first) &&
-      !isCarBrand(first) &&
-      !p.includes("@")
-    ) {
+    if (isLikelyPersonName(first) && !p.includes("@")) {
       return capitalize(first);
     }
   }
 
   const firstComma = text.match(/^([A-Za-zА-Яа-яЁё]{2,24})\s*,/);
-  if (firstComma && !isCarBrand(firstComma[1])) return capitalize(firstComma[1]);
+  if (firstComma && isLikelyPersonName(firstComma[1])) {
+    return capitalize(firstComma[1]);
+  }
 
   return "";
 }
