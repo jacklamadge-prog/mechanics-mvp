@@ -165,7 +165,7 @@ function collectBookingFields(messages: Msg[]) {
         c.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] ?? "";
     }
   }
-  phone = phone || userOnly.match(/\b\d{10,15}\b/)?.[0] ?? "";
+  phone = phone || (userOnly.match(/\b\d{10,15}\b/)?.[0] ?? "");
   email =
     email ||
     userOnly.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] ||
