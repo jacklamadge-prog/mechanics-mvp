@@ -61,11 +61,13 @@ function detectVehicle(text: string): string {
 
   const parts = text.split(/[,;]+/).map((p) => p.trim());
   for (const p of parts) {
+    const firstWord = p.split(/\s+/)[0] ?? "";
     if (
       /^[a-zA-Z]{3,12}\s*[a-zA-Z0-9-]{0,10}$/i.test(p) &&
       !p.includes("@") &&
       !/^\d+$/.test(p) &&
-      !detectService(p)
+      !detectService(p) &&
+      !(isLikelyPersonName(firstWord) && !isCarBrand(firstWord))
     ) {
       return p;
     }
